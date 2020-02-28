@@ -1,6 +1,5 @@
-from pymodm import MongoModel, fields, connect, errors
+from pymodm import MongoModel, fields, connect
 from bson.objectid import ObjectId
-import bcrypt
 
 from db import db
 
@@ -8,23 +7,20 @@ connect(db)
 
 
 class UserModel(MongoModel):
-    name = fields.CharField(required=True)
+    username = fields.CharField(required=True)
     email = fields.EmailField(required=True)
     password = fields.CharField(required=True)
+    role = fields.CharField(mongo_name="access_level", choices=["vet nurse", "nigel"], default="vet nurse")
 
     def __str__(self):
-        return (
-            "User:"
-            + f"\n ID: {self.pk}"
-            + f"\n Name: {self.name}"
-            + f"\n EMail: {self.email}"
-        )
+        return f"User:\n\tID: {self.pk}\n\tUsername: {self.username}\n\tEMail: {self.email}"
 
     def json(self):
         return {
             "_id": str(self._id),
-            "name": self.name,
+            "username": self.username,
             "email": self.email,
+            "role": self.role,
         }
 
     @classmethod
@@ -38,5 +34,12 @@ class UserModel(MongoModel):
     def find_by_email(cls, email):
         try:
             return cls.objects.raw({"email": email}).first()
+        except cls.DoesNotExist:
+            return None
+
+    @classmethod
+    def find_by_username(cls, username):
+        try:
+            return cls.objects.raw({"username": username}).first()
         except cls.DoesNotExist:
             return None
