@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_restful import Api
 from flask_jwt_extended import JWTManager
 
@@ -9,7 +9,6 @@ from settings import jwt_secret_key, jwt_expiration, roles
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = jwt_secret_key
-app.config["JWT_EXPIRATION_DELTA"] = jwt_expiration
 app.config["PROPAGATE_EXCEPTIONS"] = True
 
 api = Api(app)
@@ -22,6 +21,14 @@ def add_claims_to_jwt(identity):
     if user.role == roles[0]:
         return {"is_Auth": True}
     return {"is_Auth": False}
+
+
+@jwt.expired_token_loader
+def expired_token_callback():
+    return (
+        jsonify({"description": "The token has expired", "error": "token expired"}),
+        401,
+    )
 
 
 api.add_resource(User, "/user/<string:username>")

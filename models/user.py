@@ -2,6 +2,7 @@ from pymodm import MongoModel, fields, connect
 from bson.objectid import ObjectId
 
 from db import db
+from settings import roles, default_role
 
 connect(db)
 
@@ -10,18 +11,13 @@ class UserModel(MongoModel):
     username = fields.CharField(required=True)
     email = fields.EmailField(required=True)
     password = fields.CharField(required=True)
-    role = fields.CharField(mongo_name="access_level", choices=["vet nurse", "nigel"], default="vet nurse")
+    role = fields.CharField(mongo_name="access_level", choices=roles, default=default_role)
 
     def __str__(self):
         return f"User:\n\tID: {self.pk}\n\tUsername: {self.username}\n\tEMail: {self.email}"
 
     def json(self):
-        return {
-            "_id": str(self._id),
-            "username": self.username,
-            "email": self.email,
-            "role": self.role,
-        }
+        return {"_id": str(self._id), "username": self.username, "email": self.email, "role": self.role}
 
     @classmethod
     def find_by_id(cls, _id):

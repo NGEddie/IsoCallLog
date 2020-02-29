@@ -1,3 +1,4 @@
+from datetime import timedelta
 from flask_jwt_extended import jwt_required, create_access_token, create_refresh_token, get_jwt_claims
 from flask_restful import Resource, reqparse
 from werkzeug.security import safe_str_cmp
@@ -7,7 +8,7 @@ from cerberus import Validator
 import bcrypt
 
 from models.user import UserModel
-from settings import user_password_minlength
+from settings import user_password_minlength, roles, default_role, jwt_expiration
 
 
 def validate_password(plain_password):
@@ -24,6 +25,7 @@ def check_password(plain_password, hashed_password):
 _user_parser = reqparse.RequestParser()
 _user_parser.add_argument("username", type=str, required=True, help="username is required", trim=True)
 _user_parser.add_argument("password", type=validate_password, required=True, trim=True)
+_user_parser.add_argument("role", type=str, trim=True, choices=roles, default=default_role)
 
 
 class User(Resource):
@@ -47,8 +49,8 @@ class UserSignup(Resource):
             return ({"status": "fail", "msg": "Not authorised to create users"}, 403)
 
         _user_parser.add_argument("email", type=str, required=True, help="email is required", trim=True)
-
         data = _user_parser.parse_args()
+
         try:
             if UserModel.find_by_username(data["username"]) or UserModel.find_by_email(data["email"]):
                 return ({"status": "fail", "msg": f"User already exists ({data['username']}, {data['email']})"}, 400)
@@ -73,7 +75,8 @@ class UserLogin(Resource):
         if not user or not check_password(data["password"], user.password):
             return {"status": "fail", "msg": "Invalid Login Details"}, 401
 
-        access_token = create_access_token(identity=str(user._id), fresh=True)
+        expires_in = timedelta(seconds=jwt_expiration)
+        access_token = create_access_token(identity=str(user._id), fresh=True, expires_delta=expires_in)
         refresh_token = create_refresh_token(str(user._id))
 
         return {"status": "success", "access_token": access_token, "refresh_token": refresh_token}
