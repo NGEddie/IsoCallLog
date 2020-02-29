@@ -1,5 +1,8 @@
 Flask
 Flask-RESTful
-Flask-JWT_Extended
+Flask-JWT-Extended
 pymongo
 pymodm
+bcrypt
+Cerberus
+uwsgi
