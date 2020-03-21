@@ -1,7 +1,6 @@
 from datetime import timedelta
 from flask_jwt_extended import jwt_required, create_access_token, create_refresh_token, get_jwt_claims
 from flask_restful import Resource, reqparse
-from werkzeug.security import safe_str_cmp
 from pymongo import errors as pymongo_errors
 from pymodm import errors as pymodm_errors
 from cerberus import Validator
@@ -23,9 +22,10 @@ def check_password(plain_password, hashed_password):
 
 
 _user_parser = reqparse.RequestParser()
-_user_parser.add_argument("username", type=str, required=True, help="username is required", trim=True)
-_user_parser.add_argument("password", type=validate_password, required=True, trim=True)
+_user_parser.add_argument("username", type=str, help="username is required", trim=True)
+_user_parser.add_argument("password", type=validate_password, trim=True)
 _user_parser.add_argument("role", type=str, trim=True, choices=roles, default=default_role)
+_user_parser.add_argument("email", type=str, help="email is required", trim=True)
 
 
 class User(Resource):
@@ -37,9 +37,52 @@ class User(Resource):
 
         user = UserModel.find_by_username(username)
         if not user:
-            return {"status": "fail", "msg": "User not found"}, 404
+            return ({"status": "fail", "msg": "User not found"}, 404)
 
         return {"status": "success", "msg": user.json()}
+
+    @classmethod
+    @jwt_required
+    def put(cls, username):
+        if not get_jwt_claims()["is_Auth"]:
+            return ({"status": "fail", "msg": "Not authorised to edit users"}, 403)
+
+        user = UserModel.find_by_username(username)
+        if not user:
+            return {"status": "fail", "msg": "User not found"}, 404
+
+        data = _user_parser.parse_args()
+
+        try:
+            for field, value in data.items():
+                if value:
+                    setattr(user, field, value)
+
+            user.update_user()
+            return {"status": "success", "msg": f"User updated: {user.json()}"}
+
+        except (ValueError, pymodm_errors.ValidationError) as error:
+            return {"status": "fail", "msg": str(error)}, 400
+        except pymongo_errors.OperationFailure as error:
+            return ({"status": "fail", "msg": f"Server Error: {str(error)}"}, 500)
+        except Exception as e:
+            return ({"status": "fail", "error": {"type": str(type(e)), "msg": str(e)}}, 500)
+
+    @classmethod
+    @jwt_required
+    def delete(cls, username):
+        if not get_jwt_claims()["is_Auth"]:
+            return ({"status": "fail", "msg": "Not authorised to delete users"}, 403)
+
+        user = UserModel.find_by_id(username)
+        if not user:
+            return ({"status": "fail", "msg": "User not found"}, 404)
+
+        try:
+            user.delete_from_db()
+            return {"status": "success", "msg": f"User ({user.username}) deleted"}
+        except Exception as e:
+            return ({"status": "fail", "error": {"type": str(type(e)), "msg": str(e)}}, 500)
 
 
 class UserSignup(Resource):
@@ -48,7 +91,6 @@ class UserSignup(Resource):
         if not get_jwt_claims()["is_Auth"]:
             return ({"status": "fail", "msg": "Not authorised to create users"}, 403)
 
-        _user_parser.add_argument("email", type=str, required=True, help="email is required", trim=True)
         data = _user_parser.parse_args()
 
         try:
