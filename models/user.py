@@ -15,6 +15,8 @@ class UserModel(MongoModel):
     role = fields.CharField(mongo_name="access_level",
                             choices=ROLES,
                             default=DEFAULT_ROLE)
+    initials = fields.CharField()
+    counter = fields.IntegerField(default=1)
 
     def json(self):
         return {

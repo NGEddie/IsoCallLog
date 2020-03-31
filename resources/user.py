@@ -51,6 +51,14 @@ def validate_user(user):
                 "allowed": ROLES,
                 "default": DEFAULT_ROLE,
                 "nullable": True
+            },
+            "initials": {
+                "type": "string",
+                "nullable": True
+            },
+            "counter": {
+                "type": "integer",
+                "nullable": True
             }
         },
         purge_unknown=True)
@@ -73,6 +81,8 @@ _user_parser.add_argument("lastName")
 _user_parser.add_argument("email")
 _user_parser.add_argument("password")
 _user_parser.add_argument("role")
+_user_parser.add_argument("initials")
+_user_parser.add_argument("counter")
 
 
 class User(Resource):
@@ -204,8 +214,15 @@ class UserSignup(Resource):
 
 
 class Users(Resource):
+    @jwt_required
     def post(self):
         try:
+            if not get_jwt_claims()["is_Auth"]:
+                return ({
+                    "status": "fail",
+                    "msg": "Not authorised to create users"
+                }, 403)
+
             users_parser = reqparse.RequestParser()
             users_parser.add_argument('users', type=dict, action='append')
 
@@ -221,12 +238,9 @@ class Users(Resource):
                     }, 400
                 validated_users.append(validated_user)
             saved_users = UserModel.update_many(validated_users)
-            return {'status': 'success', 'msg': {'Users created': saved_users}}
-        except ValueError as error:
-            print(error)
-            return {'status': 'fail', 'msg': str(error)}, 400
+            return {'status': 'success', 'msg': {'users created': saved_users}}
         except Exception as error:
-            return str(error)
+            return {'status': 'fail', 'msg': str(error)}, 400
 
 
 class UserLogin(Resource):
@@ -246,5 +260,7 @@ class UserLogin(Resource):
         return {
             "status": "success",
             "access_token": access_token,
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token,
+            "initials": user.initials,
+            "counter": user.counter
         }
