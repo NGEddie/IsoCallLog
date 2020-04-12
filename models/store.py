@@ -35,5 +35,11 @@ class StoreModel(MongoModel):
     def update_store(self):
         self.save()
 
+    @classmethod
+    def update_many(cls, stores):
+        saved_stores = cls.objects.bulk_create(
+            [cls(**store) for store in stores], retrieve=True)
+        return [store.store for store in saved_stores]
+
     def delete_from_db(self):
         self.delete()

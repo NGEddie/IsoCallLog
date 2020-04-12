@@ -45,6 +45,13 @@ class CallModel(MongoModel):
         except cls.DoesNotExist:
             return None
 
+    @classmethod
+    def find_by_auth_code(cls, auth_code):
+        try:
+            return cls.objects.get({"auth_code": auth_code})
+        except cls.DoesNotExist:
+            return None
+
     def save_to_db(self):
         return self.save()
 

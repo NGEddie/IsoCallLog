@@ -14,9 +14,10 @@ class UserModel(MongoModel):
     password = fields.CharField(required=True)
     role = fields.CharField(mongo_name="access_level",
                             choices=ROLES,
-                            default=DEFAULT_ROLE)
-    initials = fields.CharField()
-    counter = fields.IntegerField(default=1)
+                            default=DEFAULT_ROLE,
+                            required=True)
+    initials = fields.CharField(required=True)
+    counter = fields.IntegerField(required=True, default=1)
 
     def json(self):
         return {
@@ -24,7 +25,9 @@ class UserModel(MongoModel):
             "username": self.username,
             "name": str(self.firstName + " " + self.lastName),
             "email": self.email,
-            "role": self.role
+            "role": self.role,
+            "initials": self.initials,
+            "counter": self.counter
         }
 
     @classmethod
@@ -50,13 +53,12 @@ class UserModel(MongoModel):
 
     @classmethod
     def update_many(cls, users):
-        #  print([cls(**user) for user in users])
-        saved_users = cls.objects.bulk_create([cls(**user) for user in users],
-                                              retrieve=True)
+        saved_users = cls.objects.bulk_create(
+            [cls(counter=1, **user) for user in users], retrieve=True)
         return [user.username for user in saved_users]
 
     def update_user(self):
-        self.save()
+        return self.save()
 
     def delete_from_db(self):
         self.delete()

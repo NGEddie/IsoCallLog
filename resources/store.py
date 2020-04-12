@@ -22,18 +22,26 @@ def validate_store(store):
             "site": {
                 "type": "integer",
                 "min": 3,
-                "max": 999
+                "max": 999,
+                "nullable": True
+            },
+            "store": {
+                "type": "string",
+                "nullable": True
             },
             "fpp": {
-                "type": "string"
+                "type": "string",
+                "nullable": True
             },
             "region": {
                 "type": "string",
-                "allowed": REGIONS
+                "allowed": REGIONS,
+                "nullable": True
             },
             "area": {
                 "type": "string",
-                "allowed": AREAS
+                "allowed": AREAS,
+                "nullable": True
             }
         },
         purge_unknown=True)
@@ -41,7 +49,7 @@ def validate_store(store):
     if store_schema.validate(store):
         return store_schema.normalized(store)
 
-    raise ValueError({'store': store['store'], 'msg': store_schema.error})
+    raise ValueError({'store': store['store'], 'msg': store_schema.errors})
 
 
 class Store(Resource):
@@ -188,18 +196,55 @@ class Stores(Resource):
 
             for store in data['stores']:
                 validated_store = validate_store(store)
+
                 if not validated_store:
                     return {
                         'status': 'fail',
                         'msg': f'Store: ({store}) not valid'
                     }, 400
+
+                if 'fpp' in validated_store:
+                    fpp = UserModel.find_by_username(validated_store['fpp'])
+                    if not fpp:
+                        return {
+                            'status': 'fail',
+                            'msg': {
+                                'store': store,
+                                'error': f'FPP ({store["fpp"]}) not found'
+                            }
+                        }, 400
+                    validated_store['fpp'] = str(fpp._id)
+
                 validated_stores.append(validated_store)
+
             saved_stores = StoreModel.update_many(validated_stores)
             return {
                 'status': 'success',
                 'msg': {
+                    'count': len(saved_stores),
                     'stores created': saved_stores
                 }
             }
+        except pymongo_errors.BulkWriteError as error:
+            print(error._error_labels)
+            return {
+                'status': 'fail',
+                'msg': {
+                    'type':
+                    str(type(error)),
+                    'error':
+                    str(error),
+                    'errmsg': [
+                        errorDetails['errmsg']
+                        for errorDetails in error.details['writeErrors']
+                    ]
+                }
+            }, 400
         except Exception as error:
-            return {'status': 'fail', 'msg': str(error)}, 400
+            return {
+                'status': 'fail',
+                'msg': {
+                    'errorType': str(type(error)),
+                    'errorMsg': str(error)
+                }
+            }, 400

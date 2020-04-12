@@ -9,13 +9,19 @@ import bcrypt
 import re
 
 from models.user import UserModel
-from settings import (USER_PASSWORD_MINLENGTH, ROLES, DEFAULT_ROLE,
-                      JWT_EXPIRATION, EMAIL_PATTERN, validString)
+from settings import (USER_PASSWORD_MINLENGTH, SALT_ROUNDS, ROLES,
+                      DEFAULT_ROLE, JWT_EXPIRATION, EMAIL_PATTERN, validString)
 
 
 def isEmail(field, value, error):
     if value and not re.match(EMAIL_PATTERN, value):
         error(field, "Invalid Email")
+
+
+def check_user_exists(username, email):
+    if UserModel.find_by_username(username) or UserModel.find_by_email(email):
+        return True
+    return False
 
 
 def validate_user(user):
@@ -55,10 +61,6 @@ def validate_user(user):
             "initials": {
                 "type": "string",
                 "nullable": True
-            },
-            "counter": {
-                "type": "integer",
-                "nullable": True
             }
         },
         purge_unknown=True)
@@ -67,6 +69,11 @@ def validate_user(user):
         return user_schema.normalized(user)
 
     raise ValueError({'User': user['username'], 'msg': user_schema.errors})
+
+
+def encrypt_password(plain_password):
+    return bcrypt.hashpw(plain_password.encode("utf-8"),
+                         bcrypt.gensalt(SALT_ROUNDS)).decode()
 
 
 def check_password(plain_password, hashed_password):
@@ -181,9 +188,7 @@ class UserSignup(Resource):
         data = validate_user(_user_parser.parse_args())
 
         try:
-            if UserModel.find_by_username(
-                    data["username"]) or UserModel.find_by_email(
-                        data["email"]):
+            if check_user_exists(data["username"], data["email"]):
                 return ({
                     "status":
                     "fail",
@@ -191,9 +196,8 @@ class UserSignup(Resource):
                     f"User already exists ({data['username']}, {data['email']})"
                 }, 400)
 
-            data["password"] = bcrypt.hashpw(data["password"].encode("utf-8"),
-                                             bcrypt.gensalt(14)).decode()
-            user = UserModel(**data).save()
+            data["password"] = encrypt_password(data['password'])
+            user = UserModel(**data).update_user()
 
             return {"status": "success", "msg": f"User Created: {user.json()}"}
         except (ValueError, pymodm_errors.ValidationError) as error:
@@ -236,9 +240,39 @@ class Users(Resource):
                         'status': 'fail',
                         'msg': f'User: ({user}) not valid'
                     }, 400
+
+                if check_user_exists(validated_user["username"],
+                                     validated_user["email"]):
+                    return ({
+                        "status":
+                        "fail",
+                        "msg":
+                        f"User already exists ({validated_user['username']}, {validated_user['email']})"
+                    }, 400)
+
+                validated_user['password'] = encrypt_password(
+                    validated_user['password'])
+
                 validated_users.append(validated_user)
+
             saved_users = UserModel.update_many(validated_users)
+
             return {'status': 'success', 'msg': {'users created': saved_users}}
+        except pymongo_errors.BulkWriteError as error:
+            print(error._error_labels)
+            return {
+                'status': 'fail',
+                'msg': {
+                    'type':
+                    str(type(error)),
+                    'error':
+                    str(error),
+                    'errmsg': [
+                        errorDetails['errmsg']
+                        for errorDetails in error.details['writeErrors']
+                    ]
+                }
+            }, 400
         except Exception as error:
             return {'status': 'fail', 'msg': str(error)}, 400
 
@@ -261,6 +295,9 @@ class UserLogin(Resource):
             "status": "success",
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "username": user.username,
+            "firstName": user.firstName,
+            "lastName": user.lastName,
             "initials": user.initials,
             "counter": user.counter
         }
